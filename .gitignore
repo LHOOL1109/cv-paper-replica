@@ -1,0 +1,5 @@
+checkpoints/
+wandb/
+papers/
+__pycache__/
+datasets/data/

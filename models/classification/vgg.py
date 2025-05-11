@@ -1,6 +1,9 @@
+from dataclasses import dataclass
+
+import lightning as L
+import torch
 import torch.nn as nn
 from torch import Tensor
-from dataclasses import dataclass
 
 
 @dataclass
@@ -145,3 +148,34 @@ class VGGNet(nn.Module):
         x = self.backbone(x)
         x = self.head(x)
         return x
+
+
+class LitVGG16D(L.LightningModule):
+    def __init__(self, model: torch.nn.Module, lr=1e-3):
+        super().__init__()
+        self.model = model
+        self.lr = lr
+        self.criterion = nn.CrossEntropyLoss()
+
+    def forward(self, x):
+        return self.model(x)
+
+    def training_step(self, batch, batch_idx):
+        x, y = batch
+        logits: Tensor = self(x)
+        loss = self.criterion(logits, y)
+        acc = (logits.argmax(1) == y).float().mean()
+        self.log("train_loss", loss)
+        self.log("train_acc", acc, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        logits: Tensor = self(x)
+        loss = self.criterion(logits, y)
+        acc = (logits.argmax(1) == y).float().mean()
+        self.log("val_loss", loss)
+        self.log("val_acc", acc, prog_bar=True)
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.lr)

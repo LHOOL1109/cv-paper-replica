@@ -6,7 +6,7 @@ from lightning.pytorch.loggers import WandbLogger
 
 
 if __name__ == "__main__":
-    from models.object_detection import yolov1
+    from networks.object_detection import yolov1
     from datasets.dataset import YOLOV1DataModule
 
     # torch.set_float32_matmul_precision('high')

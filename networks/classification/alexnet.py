@@ -1,19 +1,6 @@
 from torch import Tensor
 import torch.nn as nn
 
-'''
-AlexNet Krizhevsky et al., 2012
-
-1. ReLU 도입: 학습속도 개선, 그라디언트 배니싱 해결
-2. GPU 사용
-3. LRN 사용
-4. Dropout으로 오버피팅 방지
-5. 오버래핑 풀링
-6. 이미지 어그멘테이션
-
-ImageNet 2012 1위.
-'''
-
 
 class AlexNetBackBone(nn.Module):
     def __init__(self):

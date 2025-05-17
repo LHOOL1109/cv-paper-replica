@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Callable
 
 import lightning as L
 import torch
@@ -89,27 +90,36 @@ VGG19E_CONFIG = [
     ]
 
 
-def build_layers(layer_cfg: list[Conv3 | Conv1 | MaxPool]) -> nn.Sequential:
-    layers = []
-    for layer_type in layer_cfg:
-        if isinstance(layer_type, (Conv1)):
-            layer = nn.Conv2d(layer_type.in_channels, layer_type.out_channels, 1, 1, 0)
-            layers.append(layer)
-            layers.append(nn.ReLU(inplace=True))
+class VGGNetBackBone(nn.Module):
+    def __init__(self, layer_cfg: list[Conv3 | Conv1 | MaxPool], forward_collate_fn: Callable | None = None):
+        super().__init__()
+        self.forward_collate_fn = forward_collate_fn
+        self.blocks = nn.ModuleDict()
+        conv_idx = 1
+        pool_idx = 1
+        for cfg in layer_cfg:
+            if isinstance(cfg, Conv3):
+                conv = nn.Conv2d(cfg.in_channels, cfg.out_channels, 3, padding=1)
+                self.blocks[f'conv3_{conv_idx}'] = conv
+                self.blocks[f'relu3_{conv_idx}'] = nn.ReLU(inplace=True)
+                conv_idx += 1
+            elif isinstance(cfg, Conv1):
+                conv = nn.Conv2d(cfg.in_channels, cfg.out_channels, 1)
+                self.blocks[f'conv1_{conv_idx}'] = conv
+                self.blocks[f'relu1_{conv_idx}'] = nn.ReLU(inplace=True)
+                conv_idx += 1
+            elif isinstance(cfg, MaxPool):
+                self.blocks[f'pool{pool_idx}'] = nn.MaxPool2d(2, 2)
+                pool_idx += 1
+            else:
+                raise ValueError
 
-        elif isinstance(layer_type, (Conv3)):
-            layer = nn.Conv2d(layer_type.in_channels, layer_type.out_channels, 3, 1, 1)
-            layers.append(layer)
-            layers.append(nn.ReLU(inplace=True))
-
-        elif isinstance(layer_type, (MaxPool)):
-            layer = nn.MaxPool2d(2, 2)
-            layers.append(layer)
-
-        else:
-            raise ValueError
-
-    return nn.Sequential(*layers)
+    def forward(self, x: Tensor) -> Tensor:
+        if self.forward_collate_fn:
+            return self.forward_collate_fn(self.blocks, x)
+        for layer in self.blocks.values():
+            x = layer(x)
+        return x
 
 
 class VGGNetHead(nn.Module):
@@ -141,7 +151,7 @@ class VGGNet(nn.Module):
                  num_classes: int = 1000
                  ):
         super().__init__()
-        self.backbone = build_layers(layer_cfg)
+        self.backbone = VGGNetBackBone(layer_cfg)
         self.head = VGGNetHead(num_classes)
 
     def forward(self, x: Tensor) -> Tensor:

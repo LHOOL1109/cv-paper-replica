@@ -17,6 +17,9 @@ class FPN(nn.Module):
             ]
         )
 
+        self._out_channels = out_channels
+        self._num_depth = len(in_channels_list)
+
     def forward(self, features: dict[str, Tensor]) -> list[Tensor]:
         feature_names = list(features.keys())
         lateral_outputs = [
@@ -27,6 +30,14 @@ class FPN(nn.Module):
         for i in reversed(range(len(lateral_outputs) - 1)):
             upsampled = nn.functional.interpolate(outputs[0], size=lateral_outputs[i].shape[2:], mode="nearest")
             fused = upsampled + lateral_outputs[i]
-            outputs.insert(0, self.top_down_convs[i](fused))
-
+            out = self.top_down_convs[i](fused)
+            outputs.insert(0, out)
         return outputs
+
+    @property
+    def out_channels(self) -> int:
+        return self._out_channels
+
+    @property
+    def num_depth(self) -> int:
+        return self._num_depth

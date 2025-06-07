@@ -92,7 +92,7 @@ class BlockConfig:
 
 
 class ResNetBackBone(nn.Module):
-    def __init__(self, block_configs: list[BlockConfig]):
+    def __init__(self, stage_configs: list[list[BlockConfig]]):
         super().__init__()
         self.conv1 = nn.Sequential(
             nn.Conv2d(3, 64, 7, 2, 3),
@@ -100,19 +100,30 @@ class ResNetBackBone(nn.Module):
             nn.ReLU(inplace=True),
         )
         self.maxpool = nn.MaxPool2d(3, 2, 1)
-        self.residual_blocks = nn.Sequential(*self._build_blocks(block_configs))
+        self.stages = nn.ModuleList([
+            nn.Sequential(*[cfg.block_type(*cfg) for cfg in stage])
+            for stage in stage_configs
+        ])
+        self._out_channels = stage_configs[-1][-1].out_channels
 
-    def _build_blocks(self, block_configs: list[BlockConfig]) -> list[nn.Module]:
-        blocks = []
-        for cfg in block_configs:
-            blocks.append(cfg.block_type(*cfg))
-        return blocks
-
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, return_features: bool = False) -> Tensor | dict[str, Tensor]:
+        if return_features:
+            features = {}
         x = self.conv1(x)
         x = self.maxpool(x)
-        x = self.residual_blocks(x)
-        return x
+        if return_features:
+            features["stage1"] = x
+
+        for idx, stage in enumerate(self.stages, start=2):
+            x = stage(x)
+            if return_features:
+                features[f"stage{idx}"] = x
+
+        return features if return_features else x
+
+    @property
+    def out_channels(self) -> int:
+        return self._out_channels
 
 
 class ResNetHead(nn.Module):
@@ -130,11 +141,10 @@ class ResNetHead(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self, block_configs: list[BlockConfig], num_classes: int):
+    def __init__(self, backbone: ResNetBackBone, num_classes: int):
         super().__init__()
-        self.backbone = ResNetBackBone(block_configs)
-        in_features = block_configs[-1].out_channels
-        self.head = ResNetHead(num_classes, in_features)
+        self.backbone = backbone
+        self.head = ResNetHead(num_classes, self.backbone.out_channels)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.backbone(x)
@@ -143,139 +153,139 @@ class ResNet(nn.Module):
 
 
 RESNET_18_CONFIG = [
-    *BlockConfig(BasicBlock, 64, 64, False) * 2,
+    [*BlockConfig(BasicBlock, 64, 64, False) * 2],
 
-    BlockConfig(BasicBlock, 64, 128, True),
-    BlockConfig(BasicBlock, 128, 128, False),
+    [BlockConfig(BasicBlock, 64, 128, True),
+     BlockConfig(BasicBlock, 128, 128, False)],
 
-    BlockConfig(BasicBlock, 128, 256, True),
-    BlockConfig(BasicBlock, 256, 256, False),
+    [BlockConfig(BasicBlock, 128, 256, True),
+     BlockConfig(BasicBlock, 256, 256, False)],
 
-    BlockConfig(BasicBlock, 256, 512, True),
-    BlockConfig(BasicBlock, 512, 512, False),
+    [BlockConfig(BasicBlock, 256, 512, True),
+     BlockConfig(BasicBlock, 512, 512, False)],
 ]
 
 RESNET_34_CONFIG = [
-    *BlockConfig(BasicBlock, 64, 64, False) * 3,
+    [*BlockConfig(BasicBlock, 64, 64, False) * 3],
 
-    BlockConfig(BasicBlock, 64, 128, True),
-    *BlockConfig(BasicBlock, 128, 128, False) * 3,
+    [BlockConfig(BasicBlock, 64, 128, True),
+     *BlockConfig(BasicBlock, 128, 128, False) * 3],
 
-    BlockConfig(BasicBlock, 128, 256, True),
-    *BlockConfig(BasicBlock, 256, 256, False) * 5,
+    [BlockConfig(BasicBlock, 128, 256, True),
+     *BlockConfig(BasicBlock, 256, 256, False) * 5],
 
-    BlockConfig(BasicBlock, 256, 512, True),
-    *BlockConfig(BasicBlock, 512, 512, False) * 2,
+    [BlockConfig(BasicBlock, 256, 512, True),
+     *BlockConfig(BasicBlock, 512, 512, False) * 2],
 ]
 
 RESNET_50_CONFIG = [
-    BlockConfig(BottleneckBlock, 64, 256, False),
-    *BlockConfig(BottleneckBlock, 256, 256, False) * 2,
+    [BlockConfig(BottleneckBlock, 64, 256, False),
+     *BlockConfig(BottleneckBlock, 256, 256, False) * 2],
 
-    BlockConfig(BottleneckBlock, 256, 512, True),
-    *BlockConfig(BottleneckBlock, 512, 512, False) * 3,
+    [BlockConfig(BottleneckBlock, 256, 512, True),
+     *BlockConfig(BottleneckBlock, 512, 512, False) * 3],
 
-    BlockConfig(BottleneckBlock, 512, 1024, True),
-    *BlockConfig(BottleneckBlock, 1024, 1024, False) * 5,
+    [BlockConfig(BottleneckBlock, 512, 1024, True),
+     *BlockConfig(BottleneckBlock, 1024, 1024, False) * 5],
 
-    BlockConfig(BottleneckBlock, 1024, 2048, True),
-    *BlockConfig(BottleneckBlock, 2048, 2048, False) * 2,
+    [BlockConfig(BottleneckBlock, 1024, 2048, True),
+     *BlockConfig(BottleneckBlock, 2048, 2048, False) * 2],
 ]
 
 RESNET_101_CONFIG = [
-    BlockConfig(BottleneckBlock, 64, 256, False),
-    *BlockConfig(BottleneckBlock, 256, 256, False) * 2,
+    [BlockConfig(BottleneckBlock, 64, 256, False),
+     *BlockConfig(BottleneckBlock, 256, 256, False) * 2],
 
-    BlockConfig(BottleneckBlock, 256, 512, True),
-    *BlockConfig(BottleneckBlock, 512, 512, False) * 3,
+    [BlockConfig(BottleneckBlock, 256, 512, True),
+     *BlockConfig(BottleneckBlock, 512, 512, False) * 3],
 
-    BlockConfig(BottleneckBlock, 512, 1024, True),
-    *BlockConfig(BottleneckBlock, 1024, 1024, False) * 22,
+    [BlockConfig(BottleneckBlock, 512, 1024, True),
+     *BlockConfig(BottleneckBlock, 1024, 1024, False) * 22],
 
-    BlockConfig(BottleneckBlock, 1024, 2048, True),
-    *BlockConfig(BottleneckBlock, 2048, 2048, False) * 2,
+    [BlockConfig(BottleneckBlock, 1024, 2048, True),
+     *BlockConfig(BottleneckBlock, 2048, 2048, False) * 2],
 ]
 
 RESNET_152_CONFIG = [
-    BlockConfig(BottleneckBlock, 64, 256, False),
-    *BlockConfig(BottleneckBlock, 256, 256, False) * 2,
+    [BlockConfig(BottleneckBlock, 64, 256, False),
+     *BlockConfig(BottleneckBlock, 256, 256, False) * 2],
 
-    BlockConfig(BottleneckBlock, 256, 512, True),
-    *BlockConfig(BottleneckBlock, 512, 512, False) * 7,
+    [BlockConfig(BottleneckBlock, 256, 512, True),
+     *BlockConfig(BottleneckBlock, 512, 512, False) * 7],
 
-    BlockConfig(BottleneckBlock, 512, 1024, True),
-    *BlockConfig(BottleneckBlock, 1024, 1024, False) * 35,
+    [BlockConfig(BottleneckBlock, 512, 1024, True),
+     *BlockConfig(BottleneckBlock, 1024, 1024, False) * 35],
 
-    BlockConfig(BottleneckBlock, 1024, 2048, True),
-    *BlockConfig(BottleneckBlock, 2048, 2048, False) * 2,
+    [BlockConfig(BottleneckBlock, 1024, 2048, True),
+     *BlockConfig(BottleneckBlock, 2048, 2048, False) * 2],
 ]
 
 RESNET_18_DILATION_CONFIG = [
-    *BlockConfig(BasicBlock, 64, 64, False) * 2,
+    [*BlockConfig(BasicBlock, 64, 64, False) * 2],
 
-    BlockConfig(BasicBlock, 64, 128, True),
-    BlockConfig(BasicBlock, 128, 128, False),
+    [BlockConfig(BasicBlock, 64, 128, True),
+     BlockConfig(BasicBlock, 128, 128, False)],
 
-    BlockConfig(BasicBlock, 128, 256, True),
-    BlockConfig(BasicBlock, 256, 256, False),
+    [BlockConfig(BasicBlock, 128, 256, True),
+     BlockConfig(BasicBlock, 256, 256, False)],
 
-    BlockConfig(BasicBlock, 256, 512, False, dilation=2),
-    BlockConfig(BasicBlock, 512, 512, False, dilation=2),
+    [BlockConfig(BasicBlock, 256, 512, False, dilation=2),
+     BlockConfig(BasicBlock, 512, 512, False, dilation=2)],
 ]
 
 RESNET_34_DILATION_CONFIG = [
-    *BlockConfig(BasicBlock, 64, 64, False) * 3,
+    [*BlockConfig(BasicBlock, 64, 64, False) * 3],
 
-    BlockConfig(BasicBlock, 64, 128, True),
-    *BlockConfig(BasicBlock, 128, 128, False) * 3,
+    [BlockConfig(BasicBlock, 64, 128, True),
+     *BlockConfig(BasicBlock, 128, 128, False) * 3],
 
-    BlockConfig(BasicBlock, 128, 256, True),
-    *BlockConfig(BasicBlock, 256, 256, False) * 5,
+    [BlockConfig(BasicBlock, 128, 256, True),
+     *BlockConfig(BasicBlock, 256, 256, False) * 5],
 
-    BlockConfig(BasicBlock, 256, 512, False, dilation=2),
-    *BlockConfig(BasicBlock, 512, 512, False, dilation=2) * 2,
+    [BlockConfig(BasicBlock, 256, 512, False, dilation=2),
+     *BlockConfig(BasicBlock, 512, 512, False, dilation=2) * 2],
 ]
 
 RESNET_50_DILATION_CONFIG = [
-    BlockConfig(BottleneckBlock, 64, 256, False),
-    *BlockConfig(BottleneckBlock, 256, 256, False) * 2,
+    [BlockConfig(BottleneckBlock, 64, 256, False),
+     *BlockConfig(BottleneckBlock, 256, 256, False) * 2],
 
-    BlockConfig(BottleneckBlock, 256, 512, True),
-    *BlockConfig(BottleneckBlock, 512, 512, False) * 3,
+    [BlockConfig(BottleneckBlock, 256, 512, True),
+     *BlockConfig(BottleneckBlock, 512, 512, False) * 3],
 
-    BlockConfig(BottleneckBlock, 512, 1024, True),
-    *BlockConfig(BottleneckBlock, 1024, 1024, False) * 5,
+    [BlockConfig(BottleneckBlock, 512, 1024, True),
+     *BlockConfig(BottleneckBlock, 1024, 1024, False) * 5],
 
-    BlockConfig(BottleneckBlock, 1024, 2048, False, dilation=2),
-    *BlockConfig(BottleneckBlock, 2048, 2048, False, dilation=2) * 2,
+    [BlockConfig(BottleneckBlock, 1024, 2048, False, dilation=2),
+     *BlockConfig(BottleneckBlock, 2048, 2048, False, dilation=2) * 2],
 ]
 
 
 RESNET_101_DILATION_CONFIG = [
-    BlockConfig(BottleneckBlock, 64, 256, False),
-    *BlockConfig(BottleneckBlock, 256, 256, False) * 2,
+    [BlockConfig(BottleneckBlock, 64, 256, False),
+     *BlockConfig(BottleneckBlock, 256, 256, False) * 2],
 
-    BlockConfig(BottleneckBlock, 256, 512, True),
-    *BlockConfig(BottleneckBlock, 512, 512, False) * 3,
+    [BlockConfig(BottleneckBlock, 256, 512, True),
+     *BlockConfig(BottleneckBlock, 512, 512, False) * 3],
 
-    BlockConfig(BottleneckBlock, 512, 1024, True),
-    *BlockConfig(BottleneckBlock, 1024, 1024, False) * 22,
+    [BlockConfig(BottleneckBlock, 512, 1024, True),
+     *BlockConfig(BottleneckBlock, 1024, 1024, False) * 22],
 
-    BlockConfig(BottleneckBlock, 1024, 2048, False, dilation=2),
-    *BlockConfig(BottleneckBlock, 2048, 2048, False, dilation=2) * 2,
+    [BlockConfig(BottleneckBlock, 1024, 2048, False, dilation=2),
+     *BlockConfig(BottleneckBlock, 2048, 2048, False, dilation=2) * 2],
 ]
 
 
 RESNET_152_DILATION_CONFIG = [
-    BlockConfig(BottleneckBlock, 64, 256, False),
-    *BlockConfig(BottleneckBlock, 256, 256, False) * 2,
+    [BlockConfig(BottleneckBlock, 64, 256, False),
+     *BlockConfig(BottleneckBlock, 256, 256, False) * 2],
 
-    BlockConfig(BottleneckBlock, 256, 512, True),
-    *BlockConfig(BottleneckBlock, 512, 512, False) * 7,
+    [BlockConfig(BottleneckBlock, 256, 512, True),
+     *BlockConfig(BottleneckBlock, 512, 512, False) * 7],
 
-    BlockConfig(BottleneckBlock, 512, 1024, True),
-    *BlockConfig(BottleneckBlock, 1024, 1024, False) * 35,
+    [BlockConfig(BottleneckBlock, 512, 1024, True),
+     *BlockConfig(BottleneckBlock, 1024, 1024, False) * 35],
 
-    BlockConfig(BottleneckBlock, 1024, 2048, False, dilation=2),
-    *BlockConfig(BottleneckBlock, 2048, 2048, False, dilation=2) * 2,
+    [BlockConfig(BottleneckBlock, 1024, 2048, False, dilation=2),
+     *BlockConfig(BottleneckBlock, 2048, 2048, False, dilation=2) * 2],
 ]

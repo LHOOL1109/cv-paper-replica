@@ -2,6 +2,7 @@ import torch.nn as nn
 from torch import Tensor
 
 
+# feature pyramid networks
 class FPN(nn.Module):
     def __init__(self, in_channels_list: list[int], out_channels: int):
         super().__init__()

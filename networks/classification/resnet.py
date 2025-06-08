@@ -275,6 +275,20 @@ RESNET_101_DILATION_CONFIG = [
      *BlockConfig(BottleneckBlock, 2048, 2048, False, dilation=2) * 2],
 ]
 
+RESNET_101_DILATION_OUT_STRIDE8_CONFIG = [
+    [BlockConfig(BottleneckBlock, 64, 256, False),
+     *BlockConfig(BottleneckBlock, 256, 256, False) * 2],
+
+    [BlockConfig(BottleneckBlock, 256, 512, True),
+     *BlockConfig(BottleneckBlock, 512, 512, False) * 3],
+
+    [BlockConfig(BottleneckBlock, 512, 1024, False, dilation=2),
+     *BlockConfig(BottleneckBlock, 1024, 1024, False, dilation=2) * 22],
+
+    [BlockConfig(BottleneckBlock, 1024, 2048, False, dilation=2),
+     *BlockConfig(BottleneckBlock, 2048, 2048, False, dilation=4) * 2],
+]
+
 
 RESNET_152_DILATION_CONFIG = [
     [BlockConfig(BottleneckBlock, 64, 256, False),

@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+# TODO: multi grid, add decoder (deeplabv3+)
+
 
 class ASPP(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, atrous_rates: list[int]):
